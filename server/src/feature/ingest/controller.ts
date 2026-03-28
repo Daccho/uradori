@@ -1,54 +1,47 @@
-import { Hono } from "hono";
+import { createRoute } from "@hono/zod-openapi";
 import { getDb } from "../../shared/db/client";
-import { errorResponse } from "../../shared/error";
+import { createApp } from "../../shared/app-factory";
+import { ErrorResponse } from "../../shared/schema";
 import { adminAuth } from "../../shared/middleware/admin-auth";
 import { D1MaterialRepository } from "./infra/d1-material-repository";
 import { WorkersEmbeddingService } from "./infra/embedding-service";
 import { WorkersHackathonApiClient } from "./infra/hackathon-api-client";
 import { AppError, IngestMaterialUsecase } from "./usecase/ingest-material";
+import { IngestBody, IngestResponse } from "./schema";
 
-const app = new Hono<{ Bindings: CloudflareBindings }>();
+const app = createApp();
 
-app.post("/", adminAuth, async (c) => {
-  const body = await c.req.json();
+const ingestRoute = createRoute({
+  method: "post",
+  path: "/",
+  tags: ["Ingest"],
+  security: [{ AdminKey: [] }],
+  request: {
+    body: { content: { "application/json": { schema: IngestBody } } },
+  },
+  responses: {
+    201: {
+      content: { "application/json": { schema: IngestResponse } },
+      description: "素材をVectorizeに登録",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponse } },
+      description: "バリデーションエラー",
+    },
+    401: {
+      content: { "application/json": { schema: ErrorResponse } },
+      description: "認証エラー",
+    },
+    404: {
+      content: { "application/json": { schema: ErrorResponse } },
+      description: "トピックが見つからない",
+    },
+  },
+  middleware: [adminAuth] as const,
+});
 
-  const mode = body.mode;
-  if (!mode || (mode !== "auto" && mode !== "manual")) {
-    return errorResponse(
-      c,
-      400,
-      "VALIDATION_ERROR",
-      "mode must be 'auto' or 'manual'"
-    );
-  }
-
-  const topicId = body.topic_id;
-  if (!topicId) {
-    return errorResponse(c, 400, "VALIDATION_ERROR", "topic_id is required");
-  }
-
-  if (mode === "auto") {
-    const sources = body.sources;
-    if (!Array.isArray(sources) || sources.length === 0) {
-      return errorResponse(
-        c,
-        400,
-        "VALIDATION_ERROR",
-        "sources array is required for auto mode"
-      );
-    }
-  }
-
-  if (mode === "manual") {
-    if (!body.content || !body.type) {
-      return errorResponse(
-        c,
-        400,
-        "VALIDATION_ERROR",
-        "content and type are required for manual mode"
-      );
-    }
-  }
+app.openapi(ingestRoute, async (c) => {
+  const body = c.req.valid("json");
 
   const db = getDb(c.env.DB);
   const repo = new D1MaterialRepository(db);
@@ -60,11 +53,11 @@ app.post("/", adminAuth, async (c) => {
   const usecase = new IngestMaterialUsecase(repo, embedding, repo, apiClient);
 
   const input =
-    mode === "auto"
-      ? { mode: "auto" as const, topicId, sources: body.sources }
+    body.mode === "auto"
+      ? { mode: "auto" as const, topicId: body.topic_id, sources: body.sources }
       : {
           mode: "manual" as const,
-          topicId,
+          topicId: body.topic_id,
           content: body.content,
           type: body.type,
           sourceUrl: body.source_url,
@@ -72,13 +65,19 @@ app.post("/", adminAuth, async (c) => {
 
   try {
     const indexedCount = await usecase.execute(input);
-    return c.json({ ok: true, indexed_count: indexedCount }, 201);
+    return c.json({ ok: true as const, indexed_count: indexedCount }, 201);
   } catch (e) {
     if (e instanceof AppError) {
       if (e.code === "NOT_FOUND") {
-        return errorResponse(c, 404, "NOT_FOUND", e.message);
+        return c.json(
+          { ok: false as const, error: { code: "NOT_FOUND" as const, message: e.message } },
+          404,
+        );
       }
-      return errorResponse(c, 400, "VALIDATION_ERROR", e.message);
+      return c.json(
+        { ok: false as const, error: { code: "VALIDATION_ERROR" as const, message: e.message } },
+        400,
+      );
     }
     throw e;
   }

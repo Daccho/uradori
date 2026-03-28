@@ -10,13 +10,17 @@
     "db:migrate:remote": "wrangler d1 migrations apply uradori-db --remote"
   },
   "dependencies": {
+    "@hono/swagger-ui": "^0.6.1",
+    "@hono/zod-openapi": "^1.2.4",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.9",
-    "uuidv7": "^1.2.1"
+    "uuidv7": "^1.2.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260317.1",
     "drizzle-kit": "^0.31.10",
+    "typescript": "^6.0.2",
     "wrangler": "^4.4.0"
   }
 }
