@@ -62,20 +62,19 @@
      └── 音声認識 → テキスト変換 → API送信
           ↕ URLSession WebSocket / SSE
 [Cloudflare Workers + Hono]
- ├── POST /api/voice          # 音声・テキスト入力受付 → D1保存
- ├── GET  /api/audience-ai/:topicId  # 視聴者集約AI生成
- ├── GET  /api/sorajiro-ai/stream    # ソラジローAI SSE応答
- └── GET  /api/dialog/:sessionId     # AI対話セッション管理
+ ├── POST /api/topics          # トピック登録（管理者）
+ ├── GET  /api/topics          # トピック一覧取得
+ ├── POST /api/voice           # 視聴者の声蓄積 → D1保存
+ ├── POST /api/dialog/start    # 声集約→質問生成→対話→SSE配信
+ └── POST /api/ingest          # 素材登録（管理者）→ D1 + Vectorize
           ↕
- ├── Cloudflare AI Gateway    # Claude API プロキシ・ログ管理
+ ├── Workers AI               # LLM + Embedding（Cloudflare内完結）
+ │   ├── llama-3.1-70b-instruct  # 対話・質問生成
+ │   └── plamo-embedding-1b      # 日本語Embedding
  ├── D1                       # 視聴者の声 蓄積DB
  ├── Vectorize                # 日テレ素材 RAG ベクトルDB
  ├── R2                       # 日テレ素材・VTR ファイル保存
- ├── Durable Objects          # WebSocket リアルタイムセッション
- └── Stream                   # VTR 動画配信
-          ↕
- Claude API (claude-sonnet-4-20250514)
- └── web_search tool          # オープンデータ リアルタイム取得
+ └── 外部API（日テレハッカソン） # 番組・コーナー・ニュース・YouTube
 ```
 
 ---
@@ -86,9 +85,8 @@
 
 | 項目         | 内容                                               |
 | ------------ | -------------------------------------------------- |
-| モデル       | Claude Sonnet（AI Gateway経由）                    |
-| コンテキスト | 日テレ提供の取材メモ・未放送素材（Vectorize RAG）  |
-| ツール       | web_search（オープンデータ取得）                   |
+| モデル       | Workers AI `llama-3.1-70b-instruct`               |
+| コンテキスト | Vectorize RAGから取得した3層情報                   |
 | 応答形式     | 3層情報タグ付き（放送 / 未放送 / オープンデータ）  |
 | ペルソナ     | ソラジロー：公平で透明性を重視するAIジャーナリスト |
 
@@ -96,10 +94,26 @@
 
 | 項目           | 内容                                               |
 | -------------- | -------------------------------------------------- |
-| モデル         | Claude Sonnet（AI Gateway経由）                    |
+| モデル         | Workers AI `llama-3.1-70b-instruct`               |
 | コンテキスト   | D1に蓄積された視聴者の声の集合知                   |
-| 役割           | 視聴者の疑問・意見を代弁して議論する               |
+| 役割           | 視聴者の声を集約し、質問形式に変換してソラジローAIに投げる |
 | 更新タイミング | 視聴者が新たに意見を入力するたびにコンテキスト更新 |
+
+### 3層情報の取得設計
+
+全てVectorize RAGで統一。LLMもWorkers AI内で完結し、データが外部に送信されない。
+
+| source | データ取得元 | 登録方法 |
+|--------|-----------|---------|
+| `broadcast` | コーナー情報（headline, memo等） | ingest auto: 外部APIから自動取得 |
+| `unaired` | ニュース記事、YouTube動画情報 | ingest auto: 外部APIから自動取得 |
+| `opendata` | 政府統計・白書等 | ingest manual: 管理者が手動テキスト登録 |
+
+### データ機密性
+
+- 日テレ提供データの機密性を考慮し、LLM・Embeddingは全てCloudflare Workers AI内で処理
+- Claude API等の外部LLMサービスは使用しない（データがCloudflare外に送信されるため）
+- AI GatewayおよびAnthropic SDKは不要
 
 ---
 
@@ -128,35 +142,32 @@
 | API通信          | URLSession              | Hono Workers API呼び出し |
 | リアルタイム     | URLSessionWebSocketTask | WebSocket接続            |
 
-### AI・RAG
+### AI・RAG（全てCloudflare Workers AI内で完結）
 
-| 種別            | 技術                      | 用途                             |
-| --------------- | ------------------------- | -------------------------------- |
-| LLM SDK         | Anthropic TypeScript SDK  | Claude API呼び出し               |
-| LLMプロキシ     | Cloudflare AI Gateway     | ログ・キャッシュ・レート管理     |
-| ベクトルDB      | Cloudflare Vectorize      | 日テレ素材RAG検索                |
-| Embeddingモデル | @cf/baai/bge-base-en-v1.5 | テキストベクトル化（Workers AI） |
-| 検索ツール      | Claude web_search tool    | オープンデータ取得               |
+| 種別            | 技術                            | 用途                         |
+| --------------- | ------------------------------- | ---------------------------- |
+| LLMモデル       | @cf/meta/llama-3.1-70b-instruct | 対話・質問生成（Workers AI） |
+| Embeddingモデル | @cf/pfnet/plamo-embedding-1b    | 日本語テキストベクトル化     |
+| ベクトルDB      | Cloudflare Vectorize            | 日テレ素材RAG検索            |
 
 ### Cloudflareサービス
 
 | サービス        | 用途                                |
 | --------------- | ----------------------------------- |
-| Workers         | Honoアプリ実行環境                  |
+| Workers         | Honoアプリ実行環境（有料プラン）    |
+| Workers AI      | LLM + Embedding（データ外部送信なし）|
 | D1              | 視聴者の声蓄積DB（SQLite）          |
 | Vectorize       | 日テレ素材RAGベクトルDB             |
 | R2              | 日テレ素材・VTRファイルストレージ   |
-| Durable Objects | WebSocketリアルタイムセッション管理 |
-| AI Gateway      | Claude APIプロキシ                  |
-| Stream          | VTR動画配信                         |
 
 ### 開発ツール
 
 | 種別             | 技術         | 用途                           |
 | ---------------- | ------------ | ------------------------------ |
 | ローカル開発     | Wrangler     | Workers / D1 / R2ローカル実行  |
-| パッケージ管理   | pnpm         | モノレポ管理                   |
-| モノレポ         | Turborepo    | apps/ と packages/ 管理        |
+| パッケージ管理   | pnpm         | 依存関係管理                   |
+| テスト           | Vitest       | テスト実行                     |
+| Workers テスト   | @cloudflare/vitest-pool-workers | D1等バインディングテスト |
 | Linter/Formatter | Biome        | ESLint + Prettier代替          |
 | Swift IDE        | Xcode 15以上 | visionOSビルド・シミュレーター |
 
@@ -166,18 +177,26 @@
 
 ```
 uradori/
-├── apps/
-│   └── worker/                    # Hono + Cloudflare Workers
-│       ├── src/
-│       │   ├── index.ts           # エントリーポイント
-│       │   ├── routes/
-│       │   │   ├── voice.ts       # 視聴者の声受付API
-│       │   │   ├── audience-ai.ts # 視聴者集約AI
-│       │   │   ├── sorajiro-ai.ts # ソラジローAI（RAG + web_search）
-│       │   │   └── dialog.ts      # AI対話SSEストリーミング
-│       │   └── durable-objects/
-│       │       └── DialogSession.ts
-│       └── wrangler.toml
+├── server/                        # Hono + Cloudflare Workers
+│   ├── src/
+│   │   ├── index.ts               # エントリーポイント
+│   │   ├── routes/
+│   │   │   ├── topics.ts          # トピック登録・一覧API
+│   │   │   ├── voice.ts           # 視聴者の声受付API
+│   │   │   ├── dialog.ts          # 声集約→質問生成→対話→SSE配信
+│   │   │   └── ingest.ts          # 素材登録（D1 + Vectorize）
+│   │   ├── ai/
+│   │   │   ├── sorajiro.ts        # ソラジローAI（Workers AI + RAG）
+│   │   │   └── audience.ts        # 視聴者代表AI（声集約→質問生成）
+│   │   ├── db/
+│   │   │   └── schema.ts          # Drizzle ORMスキーマ定義
+│   │   └── middleware/
+│   │       └── admin-auth.ts      # X-Admin-Key認証ミドルウェア
+│   ├── test/
+│   │   ├── routes/                # API統合テスト
+│   │   └── ai/                    # AIロジックユニットテスト
+│   ├── wrangler.jsonc
+│   └── vitest.config.ts
 ├── ios/                           # visionOSアプリ（Swift）
 │   ├── UradoriApp.swift
 │   ├── Views/
@@ -190,92 +209,311 @@ uradori/
 │   └── Services/
 │       ├── APIClient.swift        # Workers API呼び出し
 │       └── SpeechService.swift    # 音声認識
-├── packages/
-│   ├── db/                        # Drizzle スキーマ定義
-│   └── ai/                        # Claude API共通ロジック
-├── turbo.json
-└── pnpm-workspace.yaml
+└── docs/
+    └── spec.md                    # 仕様書
 ```
 
 ---
 
 ## 7. APIインターフェース仕様
 
+### 認証
+
+- **管理者API**: `X-Admin-Key` ヘッダー + 環境変数のシークレットキー
+- **視聴者API**: 認証不要
+
+### エンドポイント一覧
+
+| メソッド | パス | 認証 | 用途 |
+|---------|------|------|------|
+| POST | `/api/topics` | Admin Key | トピック登録 |
+| GET | `/api/topics` | なし | トピック一覧取得 |
+| POST | `/api/voice` | なし | 視聴者の声を蓄積 |
+| POST | `/api/dialog/start` | なし | 声集約→質問生成→ソラジロー対話→SSE配信 |
+| POST | `/api/ingest` | Admin Key | 素材をVectorize登録 |
+
+### `POST /api/topics`（管理者）
+
+トピック（コーナー）を手動登録。管理者がtitle_idとコーナー情報を指定して登録する。
+
 ```typescript
-// 視聴者の声を蓄積
-POST /api/voice
-  Body:    { topicId: string, text: string }
-  Response: { ok: boolean }
-
-// 視聴者集約AIを生成
-GET /api/audience-ai/:topicId
-  Response: { summary: string, voiceCount: number }
-
-// ソラジローAI SSEストリーミング応答
-GET /api/sorajiro-ai/stream?topicId=xxx&message=xxx
-  Response: SSE stream
-  Event data: {
-    speaker: "sorajiro" | "audience",
-    text: string,
-    source: "broadcast" | "unaired" | "opendata"
-  }
-
-// 日テレ素材をVectorizeにインデックス登録
-POST /api/ingest
-  Body: { topicId: string, content: string, type: "script" | "memo" | "unaired" }
-  Response: { ok: boolean }
+// Request
+Headers: { "X-Admin-Key": "secret" }
+Body: {
+  title_id: string,          // 外部API番組コード (例: "ﾐ00C")
+  onair_date: string,        // YYYY-MM-DD
+  headline: string,          // コーナー見出し
+  corner_start_time?: string,
+  corner_end_time?: string,
+  headline_genre?: string,
+  broadcast_script?: string
+}
+// Response: 201
+{ id: string, ok: true }
 ```
+
+### `GET /api/topics`（公開）
+
+トピック一覧取得。title_idとonair_dateで任意フィルター可能。
+
+```typescript
+// Query: ?title_id=ﾐ00C&onair_date=2026-03-28
+// Response: 200
+{
+  items: [{
+    id: string,
+    title_id: string,
+    onair_date: string,
+    headline: string,
+    corner_start_time: string | null,
+    corner_end_time: string | null,
+    headline_genre: string | null
+  }]
+}
+```
+
+### `POST /api/voice`（公開）
+
+視聴者の声を蓄積。テキストは500文字制限。
+
+```typescript
+// Request
+Body: { topic_id: string, text: string }
+// Response: 201
+{ id: string, ok: true }
+```
+
+### `POST /api/dialog/start`（公開）
+
+視聴者の声を集約 → LLMで質問生成 → ソラジローAIと自動対話 → SSE配信。
+
+```typescript
+// Request
+Body: { topic_id: string }
+
+// Response: SSEストリーム
+
+// 1. 質問一覧（視聴者の声を集約してAI生成）
+event: questions
+data: { questions: [{ text: string, based_on_count: number }] }
+
+// 2. 各質問に対するソラジローAIの応答を順次配信
+event: dialog
+data: {
+  question: string,
+  speaker: "sorajiro",
+  text: string,
+  source: "broadcast" | "unaired" | "opendata"
+}
+
+// 3. 全質問の対話完了
+event: done
+data: { session_id: string }
+```
+
+### `POST /api/ingest`（管理者）
+
+素材をVectorizeに登録。外部API自動取得モードと手動テキスト登録モードを切り替え。
+
+```typescript
+// 外部API自動取得モード（コーナー・ニュース・YouTube）
+Headers: { "X-Admin-Key": "secret" }
+Body: {
+  mode: "auto",
+  topic_id: string,
+  sources: ("corners" | "news" | "youtube")[]
+}
+
+// 手動テキスト登録モード（opendata等）
+Headers: { "X-Admin-Key": "secret" }
+Body: {
+  mode: "manual",
+  topic_id: string,
+  content: string,
+  type: "opendata",
+  source_url?: string    // 出典URL
+}
+
+// Response: 201
+{ ok: true, indexed_count: number }
+```
+
+### エラーレスポンス（全エンドポイント共通）
+
+```typescript
+// 成功
+{ ok: true, ...data }
+
+// エラー
+{
+  ok: false,
+  error: {
+    code: "VALIDATION_ERROR" | "UNAUTHORIZED" | "NOT_FOUND" | "INTERNAL_ERROR",
+    message: string
+  }
+}
+```
+
+| ステータス | code | 用途 |
+|-----------|------|------|
+| 400 | `VALIDATION_ERROR` | バリデーション失敗（500文字超過、必須フィールド欠如等） |
+| 401 | `UNAUTHORIZED` | Admin Key不正・未指定 |
+| 404 | `NOT_FOUND` | topic_idが存在しない等 |
+| 500 | `INTERNAL_ERROR` | サーバー内部エラー |
+
+### CORS
+
+- 本番: CORSなし（visionOSネイティブアプリはURLSessionで接続）
+- 開発: `localhost:*` のみ許可（ブラウザ/Swagger UIからのテスト用）
 
 ---
 
 ## 8. D1 データスキーマ
 
+### 設計方針
+
+- **ID生成**: UUID v7（全テーブル共通、時系列ソート可能）
+- **FK制約**: 全テーブルで有効化（`PRAGMA foreign_keys = ON`）
+- **削除方針**: 削除機能なし
+- **外部APIキャッシュ**: コーナー情報のみD1保存、視聴率・YouTube等は都度外部API
+
+### テーブル定義
+
 ```sql
--- トピック（放送された各ニュース）
+-- トピック（コーナー単位、外部APIのcornersに対応）
 CREATE TABLE topics (
-  id TEXT PRIMARY KEY,
-  title TEXT NOT NULL,
-  aired_at TIMESTAMP NOT NULL,
-  broadcast_script TEXT
+  id TEXT PRIMARY KEY,              -- UUID v7
+  title_id TEXT NOT NULL,           -- 外部API番組コード (例: "ﾐ00C")
+  onair_date TEXT NOT NULL,         -- 放送日 (YYYY-MM-DD)
+  headline TEXT NOT NULL,           -- コーナー見出し
+  corner_start_time TEXT,           -- コーナー開始時刻
+  corner_end_time TEXT,             -- コーナー終了時刻
+  headline_genre TEXT,              -- ジャンル
+  broadcast_script TEXT             -- 放送スクリプト
 );
 
 -- 視聴者の声
 CREATE TABLE audience_voices (
-  id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY,              -- UUID v7
   topic_id TEXT NOT NULL REFERENCES topics(id),
-  text TEXT NOT NULL,
+  text TEXT NOT NULL,               -- 500文字制限
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- AI対話セッション
+CREATE TABLE dialog_sessions (
+  id TEXT PRIMARY KEY,              -- UUID v7
+  topic_id TEXT NOT NULL REFERENCES topics(id),
+  status TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'ended'
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  ended_at TIMESTAMP
 );
 
 -- AI対話ログ
 CREATE TABLE dialog_logs (
-  id TEXT PRIMARY KEY,
-  topic_id TEXT NOT NULL,
-  speaker TEXT NOT NULL, -- 'sorajiro' | 'audience'
+  id TEXT PRIMARY KEY,              -- UUID v7
+  session_id TEXT NOT NULL REFERENCES dialog_sessions(id),
+  topic_id TEXT NOT NULL REFERENCES topics(id),
+  speaker TEXT NOT NULL,            -- 'sorajiro' | 'audience'
   text TEXT NOT NULL,
-  source TEXT,           -- 'broadcast' | 'unaired' | 'opendata'
+  source TEXT,                      -- 'broadcast' | 'unaired' | 'opendata'
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 素材メタデータ
+CREATE TABLE materials (
+  id TEXT PRIMARY KEY,              -- UUID v7
+  topic_id TEXT NOT NULL REFERENCES topics(id),
+  type TEXT NOT NULL,               -- 'script' | 'memo' | 'unaired'
+  content TEXT NOT NULL,
+  vectorize_id TEXT,                -- Vectorizeに登録したベクトルのID
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- インデックス
+CREATE INDEX idx_topics_titleid_date ON topics(title_id, onair_date);
+CREATE INDEX idx_audience_voices_topic ON audience_voices(topic_id);
+CREATE INDEX idx_dialog_sessions_topic ON dialog_sessions(topic_id);
+CREATE INDEX idx_dialog_logs_session ON dialog_logs(session_id);
+CREATE INDEX idx_dialog_logs_topic_created ON dialog_logs(topic_id, created_at);
+CREATE INDEX idx_materials_topic ON materials(topic_id);
 ```
 
 ---
 
-## 9. 役割分担
+## 9. テスト戦略
 
-|          | 担当A（バックエンド）                                                              | 担当B（visionOS）                                                               |
-| -------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| 技術     | TypeScript / Hono / Cloudflare                                                     | Swift / SwiftUI / RealityKit                                                    |
-| 担当範囲 | Workers API / D1 / Vectorize RAG / Claude API / AI Gateway / Durable Objects / SSE | Xcode プロジェクト / SwiftUI UI / APIClient / RealityKit 空間 / Speech 音声入力 |
-| 接点     | APIインターフェース仕様（セクション7）を共有して並行開発                           | 同左                                                                            |
+### フレームワーク
+
+| 種別 | 技術 | 用途 |
+|------|------|------|
+| テストFW | Vitest | テスト実行 |
+| Workers対応 | @cloudflare/vitest-pool-workers | D1等のバインディングをテスト内で利用 |
+
+### テスト範囲
+
+#### API統合テスト
+
+| エンドポイント | テスト内容 |
+|---------------|----------|
+| `POST /api/topics` | 正常登録、Admin Key不正で401、バリデーションエラー |
+| `GET /api/topics` | 一覧取得、title_id・onair_dateフィルタリング |
+| `POST /api/voice` | 正常蓄積、500文字超過で400、存在しないtopic_idで400 |
+| `POST /api/dialog/start` | SSEストリーム開始確認 |
+| `POST /api/ingest` | 素材登録、Vectorize連携確認 |
+
+#### AIロジック ユニットテスト（Workers AIモック）
+
+- 視聴者の声 → 質問生成のプロンプト組み立て
+- ソラジローAIのRAGコンテキスト構築
+- SSEイベントのフォーマット
 
 ---
 
-## 10. ハッカソン実装優先度
+## 10. SSE設計
+
+- **Workersプラン**: 有料プラン（$5/月）— CPU時間無制限、SSEタイムアウトなし
+- **質問数上限**: 制限なし（LLMが必要と判断した数だけ生成）
+- **クライアント切断**: SSE切断を検知したらWorkers AI呼び出しも中断
+
+---
+
+## 11. 環境変数一覧
+
+### シークレット（`wrangler secret put`）
+
+| 変数名 | 用途 |
+|--------|------|
+| `ADMIN_KEY` | X-Admin-Key認証 |
+| `HACKATHON_API_KEY` | 外部API(日テレハッカソン)認証 |
+| `HACKATHON_API_URL` | 外部APIベースURL |
+
+### バインディング
+
+| バインディング名 | 種別 | 用途 |
+|-----------------|------|------|
+| `DB` | D1 | データベース |
+| `VECTORIZE` | Vectorize | ベクトルインデックス |
+| `AI` | Workers AI | LLM（llama-3.1-70b）+ Embedding（plamo-embedding-1b） |
+
+---
+
+## 12. 役割分担
+
+|          | 担当A（バックエンド）                                                        | 担当B（visionOS）                                                               |
+| -------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 技術     | TypeScript / Hono / Cloudflare                                               | Swift / SwiftUI / RealityKit                                                    |
+| 担当範囲 | Workers API / D1 / Vectorize RAG / Workers AI / SSE                          | Xcode プロジェクト / SwiftUI UI / APIClient / RealityKit 空間 / Speech 音声入力 |
+| 接点     | APIインターフェース仕様（セクション7）を共有して並行開発                     | 同左                                                                            |
+
+---
+
+## 13. ハッカソン実装優先度
 
 ### Day 1（コア機能）
 
 - [ ] Hono + Workers セットアップ
-- [ ] Claude API（AI Gateway経由）で対話動作確認
+- [ ] Workers AI（llama-3.1-70b）で対話動作確認
 - [ ] D1スキーマ作成・視聴者の声蓄積API
 - [ ] SSEストリーミング（AI応答のリアルタイム配信）
 - [ ] Xcodeプロジェクト作成
@@ -284,9 +522,8 @@ CREATE TABLE dialog_logs (
 
 ### Day 2（差別化機能）
 
-- [ ] Vectorize RAG（日テレ素材インデックス登録・検索）
-- [ ] web_searchでオープンデータ取得・3層情報応答
-- [ ] Durable Objects + WebSocket リアルタイム同期
+- [ ] Vectorize RAG（外部APIからのingest・plamo-embedding-1bでベクトル化）
+- [ ] 3層情報応答（broadcast / unaired / opendata タグ付き）
 - [ ] RealityKit ImmersiveSpace（スタジオ空間再現）
 - [ ] AVFoundation VTR動画再生
 - [ ] Speech Framework 音声入力
