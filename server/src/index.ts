@@ -19,6 +19,12 @@ app.use(
   })
 );
 
+// D1: FK制約を有効化（各リクエストごとに必要）
+app.use("/api/*", async (c, next) => {
+  await c.env.DB.exec("PRAGMA foreign_keys = ON");
+  await next();
+});
+
 app.onError((err, c) => {
   console.error(err);
   return c.json(

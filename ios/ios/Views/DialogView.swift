@@ -12,9 +12,17 @@ struct DialogMessage: Identifiable {
     }
 
     enum InfoSource: String {
-        case broadcast = "放送情報"
-        case unaired = "未放送素材"
-        case opendata = "オープンデータ"
+        case broadcast = "broadcast"
+        case unaired = "unaired"
+        case opendata = "opendata"
+
+        var displayName: String {
+            switch self {
+            case .broadcast: "放送情報"
+            case .unaired: "未放送素材"
+            case .opendata: "オープンデータ"
+            }
+        }
     }
 }
 
@@ -52,7 +60,7 @@ struct DialogBubble: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
 
             if let source = message.source {
-                Label(source.rawValue, systemImage: sourceIcon(source))
+                Label(source.displayName, systemImage: sourceIcon(source))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

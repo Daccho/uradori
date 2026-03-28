@@ -1,54 +1,56 @@
 import Foundation
-
-struct SorajiroResponse: Codable {
-    let speaker: String
-    let text: String
-    let source: String?
-}
+import AVFoundation
 
 @Observable
 class SorajiroAI {
     var messages: [DialogMessage] = []
+    var questions: [GeneratedQuestion] = []
     var isStreaming = false
+    var sessionId: String?
+    var errorMessage: String?
 
     private let apiClient = APIClient()
+    private var audioPlayer: AVAudioPlayer?
 
-    func startDialog(topicId: String, message: String) async {
+    func startDialog(topicId: String) async {
         isStreaming = true
+        errorMessage = nil
         defer { isStreaming = false }
 
         do {
-            for try await event in apiClient.streamSorajiroAI(topicId: topicId, message: message) {
-                let dialogMessage = DialogMessage(
-                    speaker: .sorajiro,
-                    text: event.text,
-                    source: parseSource(event.source)
-                )
-                messages.append(dialogMessage)
+            for try await event in apiClient.streamDialog(topicId: topicId) {
+                switch event {
+                case .questions(let generatedQuestions):
+                    questions = generatedQuestions
+                case .dialog(_, let speaker, let text, let source):
+                    let dialogMessage = DialogMessage(
+                        speaker: speaker == "sorajiro" ? .sorajiro : .audience,
+                        text: text,
+                        source: source.flatMap { DialogMessage.InfoSource(rawValue: $0) }
+                    )
+                    messages.append(dialogMessage)
+                case .done(let id):
+                    sessionId = id
+                case .error(let code, let message):
+                    errorMessage = "対話エラー: \(message) (\(code))"
+                }
             }
         } catch {
-            print("SorajiroAI stream error: \(error)")
+            errorMessage = "対話の接続に失敗しました"
         }
     }
 
     func speak(text: String) async {
         do {
             let audioData = try await apiClient.fetchVoicevoxAudio(text: text)
-            try await playAudio(data: audioData)
+            try playAudio(data: audioData)
         } catch {
             print("VOICEVOX audio error: \(error)")
         }
     }
 
-    private func playAudio(data: Data) async throws {
-        let player = try AVAudioPlayer(data: data)
-        player.play()
-    }
-
-    private func parseSource(_ source: String?) -> DialogMessage.InfoSource? {
-        guard let source else { return nil }
-        return DialogMessage.InfoSource(rawValue: source)
+    private func playAudio(data: Data) throws {
+        audioPlayer = try AVAudioPlayer(data: data)
+        audioPlayer?.play()
     }
 }
-
-import AVFoundation

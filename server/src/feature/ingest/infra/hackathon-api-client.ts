@@ -14,7 +14,10 @@ export class WorkersHackathonApiClient implements HackathonApiClient {
     const res = await fetch(url, {
       headers: { "X-Api-Key": this.apiKey },
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error(`[HackathonAPI] fetchCorners failed: ${res.status} ${res.statusText} (${url})`);
+      return [];
+    }
     const data = (await res.json()) as unknown[];
     return data.map((item) => ({
       content: JSON.stringify(item),
@@ -29,7 +32,10 @@ export class WorkersHackathonApiClient implements HackathonApiClient {
     const res = await fetch(url, {
       headers: { "X-Api-Key": this.apiKey },
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error(`[HackathonAPI] fetchNews failed: ${res.status} ${res.statusText} (${url})`);
+      return [];
+    }
     const data = (await res.json()) as unknown[];
     return data.map((item) => ({
       content: JSON.stringify(item),
@@ -44,7 +50,10 @@ export class WorkersHackathonApiClient implements HackathonApiClient {
     const res = await fetch(url, {
       headers: { "X-Api-Key": this.apiKey },
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error(`[HackathonAPI] fetchYoutube failed: ${res.status} ${res.statusText} (${url})`);
+      return [];
+    }
     const data = (await res.json()) as unknown[];
     return data.map((item) => ({
       content: JSON.stringify(item),

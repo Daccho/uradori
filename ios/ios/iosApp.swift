@@ -24,6 +24,7 @@ struct iosApp: App {
         ImmersiveSpace(id: "ImmersiveSpace") {
             ImmersiveView()
                 .environment(sorajiroAI)
+                .environment(audienceAI)
         }
     }
 }
