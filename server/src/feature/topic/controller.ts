@@ -1,49 +1,82 @@
-import { Hono } from "hono";
+import { createRoute } from "@hono/zod-openapi";
 import { getDb } from "../../shared/db/client";
-import { errorResponse } from "../../shared/error";
+import { createApp } from "../../shared/app-factory";
+import { ErrorResponse } from "../../shared/schema";
 import { adminAuth } from "../../shared/middleware/admin-auth";
 import { D1TopicRepository } from "./infra/d1-topic-repository";
 import { CreateTopicUsecase } from "./usecase/create-topic";
 import { ListTopicsUsecase } from "./usecase/list-topics";
+import {
+  CreateTopicBody,
+  CreateTopicResponse,
+  ListTopicsQuery,
+  ListTopicsResponse,
+} from "./schema";
 
-const app = new Hono<{ Bindings: CloudflareBindings }>();
+const app = createApp();
 
-app.post("/", adminAuth, async (c) => {
-  const body = await c.req.json();
+const createTopicRoute = createRoute({
+  method: "post",
+  path: "/",
+  tags: ["Topics"],
+  security: [{ AdminKey: [] }],
+  request: {
+    body: { content: { "application/json": { schema: CreateTopicBody } } },
+  },
+  responses: {
+    201: {
+      content: { "application/json": { schema: CreateTopicResponse } },
+      description: "トピック登録",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponse } },
+      description: "バリデーションエラー",
+    },
+    401: {
+      content: { "application/json": { schema: ErrorResponse } },
+      description: "認証エラー",
+    },
+  },
+  middleware: [adminAuth] as const,
+});
 
-  const titleId = body.title_id;
-  const onairDate = body.onair_date;
-  const headline = body.headline;
+const listTopicsRoute = createRoute({
+  method: "get",
+  path: "/",
+  tags: ["Topics"],
+  request: {
+    query: ListTopicsQuery,
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: ListTopicsResponse } },
+      description: "トピック一覧",
+    },
+  },
+});
 
-  if (!titleId || !onairDate || !headline) {
-    return errorResponse(
-      c,
-      400,
-      "VALIDATION_ERROR",
-      "title_id, onair_date, and headline are required"
-    );
-  }
+app.openapi(createTopicRoute, async (c) => {
+  const body = c.req.valid("json");
 
   const db = getDb(c.env.DB);
   const repo = new D1TopicRepository(db);
   const usecase = new CreateTopicUsecase(repo);
 
   const id = await usecase.execute({
-    titleId,
-    onairDate,
-    headline,
+    titleId: body.title_id,
+    onairDate: body.onair_date,
+    headline: body.headline,
     cornerStartTime: body.corner_start_time ?? null,
     cornerEndTime: body.corner_end_time ?? null,
     headlineGenre: body.headline_genre ?? null,
     broadcastScript: body.broadcast_script ?? null,
   });
 
-  return c.json({ id, ok: true }, 201);
+  return c.json({ id, ok: true as const }, 201);
 });
 
-app.get("/", async (c) => {
-  const titleId = c.req.query("title_id");
-  const onairDate = c.req.query("onair_date");
+app.openapi(listTopicsRoute, async (c) => {
+  const { title_id: titleId, onair_date: onairDate } = c.req.valid("query");
 
   const db = getDb(c.env.DB);
   const repo = new D1TopicRepository(db);
@@ -60,9 +93,9 @@ app.get("/", async (c) => {
       title_id: t.titleId,
       onair_date: t.onairDate,
       headline: t.headline,
-      corner_start_time: t.cornerStartTime,
-      corner_end_time: t.cornerEndTime,
-      headline_genre: t.headlineGenre,
+      corner_start_time: t.cornerStartTime ?? null,
+      corner_end_time: t.cornerEndTime ?? null,
+      headline_genre: t.headlineGenre ?? null,
     })),
   });
 });

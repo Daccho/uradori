@@ -1,19 +1,37 @@
-import { Hono } from "hono";
+import { createRoute } from "@hono/zod-openapi";
 import { streamSSE } from "hono/streaming";
 import { getDb } from "../../shared/db/client";
-import { errorResponse } from "../../shared/error";
+import { createApp } from "../../shared/app-factory";
+import { ErrorResponse } from "../../shared/schema";
 import { D1DialogRepository } from "./infra/d1-dialog-repository";
 import { WorkersAIService } from "./infra/workers-ai-service";
 import { StartDialogUsecase, AppError } from "./usecase/start-dialog";
+import { StartDialogBody } from "./schema";
 
-const dialog = new Hono<{ Bindings: CloudflareBindings }>();
+const app = createApp();
 
-dialog.post("/start", async (c) => {
-  const body = await c.req.json<{ topic_id?: string }>();
+const startDialogRoute = createRoute({
+  method: "post",
+  path: "/start",
+  tags: ["Dialog"],
+  request: {
+    body: { content: { "application/json": { schema: StartDialogBody } } },
+  },
+  responses: {
+    200: {
+      description:
+        "SSEストリーム。イベント: questions (質問一覧), dialog (AI対話), done (完了), error (エラー)",
+      content: { "text/event-stream": { schema: { type: "string" } } },
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponse } },
+      description: "バリデーションエラー",
+    },
+  },
+});
 
-  if (!body.topic_id) {
-    return errorResponse(c, 400, "VALIDATION_ERROR", "topic_id is required");
-  }
+app.openapi(startDialogRoute, async (c) => {
+  const { topic_id } = c.req.valid("json");
 
   const db = getDb(c.env.DB);
   const repo = new D1DialogRepository(db);
@@ -22,7 +40,7 @@ dialog.post("/start", async (c) => {
 
   return streamSSE(c, async (stream) => {
     try {
-      for await (const event of usecase.execute(body.topic_id!)) {
+      for await (const event of usecase.execute(topic_id)) {
         let data: string;
         switch (event.type) {
           case "questions":
@@ -57,7 +75,7 @@ dialog.post("/start", async (c) => {
         await stream.writeSSE({ event: "error", data: errorData });
       }
     }
-  });
+  }) as any;
 });
 
-export default dialog;
+export default app;
