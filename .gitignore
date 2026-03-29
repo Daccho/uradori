@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+
+# Local agent settings
+.claude/settings.local.json
+
+# Xcode user-specific files
+**/xcuserdata/
+*.xcuserstate
+
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+*.tsbuildinfo
+next-env.d.ts
+
+# Cloudflare Workers
+.wrangler/
+.dev.vars
+
+# Build output
+dist/
