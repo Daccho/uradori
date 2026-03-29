@@ -156,7 +156,7 @@ struct ImmersiveView: View {
     private func createSorajiroAvatar() async -> Entity {
         do {
             let entity = try await Entity(named: "Sorajiro", in: realityKitContentBundle)
-            // アニメーションがあれば再生
+            normalizeEntityScale(entity, targetHeight: 1.5)
             if let animation = entity.availableAnimations.first {
                 entity.playAnimation(animation.repeat())
             }
@@ -192,6 +192,16 @@ struct ImmersiveView: View {
     private func createViewerAvatar() async -> Entity {
         do {
             let entity = try await Entity(named: "shichosha", in: realityKitContentBundle)
+            normalizeEntityScale(entity, targetHeight: 1.0)
+
+            guard hasVisibleMesh(entity) else {
+                print("shichosha model loaded but has no visible mesh content")
+                return createFallbackAvatar(
+                    color: .init(red: 0.2, green: 0.85, blue: 0.4, alpha: 1.0),
+                    headColor: .init(red: 0.3, green: 0.9, blue: 0.5, alpha: 1.0)
+                )
+            }
+
             if let animation = entity.availableAnimations.first {
                 entity.playAnimation(animation.repeat())
             }
@@ -203,6 +213,21 @@ struct ImmersiveView: View {
                 headColor: .init(red: 0.3, green: 0.9, blue: 0.5, alpha: 1.0)
             )
         }
+    }
+
+    private func normalizeEntityScale(_ entity: Entity, targetHeight: Float = 1.0) {
+        let bounds = entity.visualBounds(relativeTo: entity)
+        let height = bounds.extents.y
+        guard height > 0.0001 else { return }
+        if height < 0.05 {
+            let scaleFactor = targetHeight / height
+            entity.scale *= SIMD3<Float>(repeating: scaleFactor)
+        }
+    }
+
+    private func hasVisibleMesh(_ entity: Entity) -> Bool {
+        if entity.components.has(ModelComponent.self) { return true }
+        return entity.children.contains { hasVisibleMesh($0) }
     }
 
     // MARK: - 視聴者の声演出
