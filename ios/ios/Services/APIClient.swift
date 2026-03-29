@@ -57,7 +57,7 @@ enum DialogStreamEvent {
 class APIClient {
     private let baseURL: URL
 
-    init(baseURL: URL = URL(string: "http://localhost:8787")!) {
+    init(baseURL: URL = URL(string: "https://uradori-api.daccho.workers.dev")!) {
         self.baseURL = baseURL
     }
 

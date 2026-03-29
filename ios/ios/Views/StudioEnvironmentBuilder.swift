@@ -1,5 +1,6 @@
 import RealityKit
 import AVFoundation
+import UIKit
 
 struct StudioEnvironmentBuilder {
 
