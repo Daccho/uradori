@@ -41,7 +41,7 @@ pnpm run cf-typegen       # Generate CloudflareBindings types from wrangler.json
 - SSE streaming for AI dialog responses (Workers paid plan, no timeout)
 - Admin endpoints authenticated via `X-Admin-Key` header; viewer endpoints are public
 - Error responses follow `{ ok: false, error: { code, message } }` format
-- CORS: disabled in prod (native visionOS app uses URLSession), `localhost:*` only in dev
+- CORS: `localhost:*` in dev, `*.uradori.workers.dev` + `https://uradori-web.workers.dev` in prod
 
 ### Cloudflare Bindings
 

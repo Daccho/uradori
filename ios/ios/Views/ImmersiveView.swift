@@ -63,7 +63,7 @@ struct ImmersiveView: View {
 
             // 対話パネル（中央手前に配置）
             if let dialogPanel = attachments.entity(for: "dialog-panel") {
-                dialogPanel.position = [0, 1.2, -1.5]
+                dialogPanel.position = [0.9, 0.7, -1.5]
                 root.addChild(dialogPanel)
             }
 
