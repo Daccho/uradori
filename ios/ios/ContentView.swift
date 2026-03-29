@@ -14,6 +14,7 @@ struct ContentView: View {
     @Environment(AudienceAI.self) private var audienceAI
     @Environment(SpeechService.self) private var speechService
     @Environment(DialogPlaybackController.self) private var dialogPlaybackController
+    @Environment(VideoPlayerManager.self) private var videoPlayerManager
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
 
@@ -31,6 +32,9 @@ struct ContentView: View {
             if selectedTopic == nil {
                 TopicListSection(topics: topics) { topic in
                     selectedTopic = topic
+                    if let urlString = topic.videoUrl, let url = URL(string: urlString) {
+                        videoPlayerManager.loadVideo(url: url)
+                    }
                 }
             } else {
                 HStack {
@@ -77,13 +81,16 @@ struct ContentView: View {
                 if isOpen {
                     switch await openImmersiveSpace(id: "ImmersiveSpace") {
                     case .opened:
-                        break
+                        if videoPlayerManager.currentURL != nil {
+                            videoPlayerManager.play()
+                        }
                     case .userCancelled, .error:
                         isImmersiveSpaceOpen = false
                     @unknown default:
                         isImmersiveSpaceOpen = false
                     }
                 } else {
+                    videoPlayerManager.stop()
                     await dismissImmersiveSpace()
                 }
                 isTransitioning = false
@@ -104,6 +111,10 @@ struct ContentView: View {
             if let msg { errorMessage = msg; audienceAI.errorMessage = nil }
         }
         .task {
+            if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
+                topics = TopicItem.mockData
+                return
+            }
             Task { await speechService.requestAuthorization() }
             do {
                 topics = try await apiClient.fetchTopics()
@@ -145,4 +156,5 @@ struct TopicListSection: View {
         .environment(AudienceAI())
         .environment(SpeechService())
         .environment(DialogPlaybackController())
+        .environment(VideoPlayerManager())
 }

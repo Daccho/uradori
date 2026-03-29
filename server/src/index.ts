@@ -13,7 +13,13 @@ app.use(
   "/api/*",
   cors({
     origin: (origin) => {
-      if (origin && origin.startsWith("http://localhost")) return origin;
+      if (!origin) return "";
+      if (origin.startsWith("http://localhost")) return origin;
+      if (
+        origin.endsWith(".uradori.workers.dev") ||
+        origin === "https://uradori-web.workers.dev"
+      )
+        return origin;
       return "";
     },
   })

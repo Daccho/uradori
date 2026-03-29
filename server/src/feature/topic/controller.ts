@@ -126,6 +126,7 @@ app.openapi(createTopicRoute, async (c) => {
     cornerEndTime: body.corner_end_time ?? null,
     headlineGenre: body.headline_genre ?? null,
     broadcastScript: body.broadcast_script ?? null,
+    videoUrl: body.video_url ?? null,
   });
 
   return c.json({ id, ok: true as const }, 201);
@@ -152,6 +153,7 @@ app.openapi(listTopicsRoute, async (c) => {
       corner_start_time: t.cornerStartTime ?? null,
       corner_end_time: t.cornerEndTime ?? null,
       headline_genre: t.headlineGenre ?? null,
+      video_url: t.videoUrl ?? null,
     })),
   });
 });

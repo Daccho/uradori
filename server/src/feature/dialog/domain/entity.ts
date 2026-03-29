@@ -29,5 +29,6 @@ export type DialogEvent =
       speaker: "sorajiro" | "audience";
       text: string;
       source?: string;
+      audioUrl?: string;
     }
   | { type: "done"; sessionId: string };

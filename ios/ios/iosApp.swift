@@ -13,7 +13,8 @@ struct iosApp: App {
     @State private var audienceAI = AudienceAI()
     @State private var speechService = SpeechService()
     @State private var dialogPlaybackController = DialogPlaybackController()
-    @State private var immersionStyle: ImmersionStyle = .mixed
+    @State private var videoPlayerManager = VideoPlayerManager()
+    @State private var immersionStyle: ImmersionStyle = .full
 
     var body: some Scene {
         WindowGroup {
@@ -22,6 +23,7 @@ struct iosApp: App {
                 .environment(audienceAI)
                 .environment(speechService)
                 .environment(dialogPlaybackController)
+                .environment(videoPlayerManager)
         }
 
         ImmersiveSpace(id: "ImmersiveSpace") {
@@ -29,7 +31,8 @@ struct iosApp: App {
                 .environment(sorajiroAI)
                 .environment(audienceAI)
                 .environment(dialogPlaybackController)
+                .environment(videoPlayerManager)
         }
-        .immersionStyle(selection: $immersionStyle, in: .mixed)
+        .immersionStyle(selection: $immersionStyle, in: .full)
     }
 }

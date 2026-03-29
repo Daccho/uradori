@@ -8,6 +8,7 @@ export const CreateTopicBody = z.object({
   corner_end_time: z.string().nullable().optional().openapi({ description: "コーナー終了時刻" }),
   headline_genre: z.string().nullable().optional().openapi({ description: "見出しジャンル" }),
   broadcast_script: z.string().nullable().optional().openapi({ description: "放送台本" }),
+  video_url: z.string().nullable().optional().openapi({ description: "動画URL" }),
 });
 
 export const CreateTopicResponse = z.object({
@@ -42,6 +43,7 @@ export const ListTopicsResponse = z.object({
       corner_start_time: z.string().nullable(),
       corner_end_time: z.string().nullable(),
       headline_genre: z.string().nullable(),
+      video_url: z.string().nullable(),
     })
   ),
 });

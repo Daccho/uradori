@@ -23,6 +23,12 @@
 			"index_name": "uradori-materials"
 		}
 	],
+	"r2_buckets": [
+		{
+			"binding": "TTS_CACHE",
+			"bucket_name": "uradori-tts-cache"
+		}
+	],
 	"observability": {
 		"enabled": true,
 		"head_sampling_rate": 1

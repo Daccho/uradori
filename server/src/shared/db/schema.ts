@@ -12,6 +12,7 @@ export const topics = sqliteTable(
     cornerEndTime: text("corner_end_time"),
     headlineGenre: text("headline_genre"),
     broadcastScript: text("broadcast_script"),
+    videoUrl: text("video_url"),
   },
   (table) => [
     index("idx_topics_titleid_date").on(table.titleId, table.onairDate),

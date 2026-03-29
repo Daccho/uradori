@@ -5,6 +5,8 @@ import { createApp } from "../../shared/app-factory";
 import { ErrorResponse } from "../../shared/schema";
 import { D1DialogRepository } from "./infra/d1-dialog-repository";
 import { WorkersAIService } from "./infra/workers-ai-service";
+import { ElevenLabsTTSService } from "../tts/infra/elevenlabs-tts-service";
+import { R2TTSCache } from "../tts/infra/r2-tts-cache";
 import { StartDialogUsecase, AppError } from "./usecase/start-dialog";
 import { StartDialogBody } from "./schema";
 
@@ -20,7 +22,7 @@ const startDialogRoute = createRoute({
   responses: {
     200: {
       description:
-        "SSEストリーム。イベント: questions (質問一覧), dialog (AI対話), done (完了), error (エラー)",
+        "SSEストリーム。イベント: questions (質問一覧), dialog (AI対話 + audio_url), done (完了), error (エラー)",
       content: { "text/event-stream": { schema: { type: "string" } } },
     },
     400: {
@@ -36,7 +38,21 @@ app.openapi(startDialogRoute, async (c) => {
   const db = getDb(c.env.DB);
   const repo = new D1DialogRepository(db);
   const aiService = new WorkersAIService(c.env.AI, c.env.VECTORIZE, db);
-  const usecase = new StartDialogUsecase(repo, repo, repo, aiService);
+
+  const ttsService = new ElevenLabsTTSService(c.env.ELEVENLABS_API_KEY, {
+    sorajiro: c.env.ELEVENLABS_VOICE_ID_SORAJIRO,
+    audience: c.env.ELEVENLABS_VOICE_ID_AUDIENCE,
+  });
+  const ttsCache = new R2TTSCache(c.env.TTS_CACHE);
+
+  const usecase = new StartDialogUsecase(
+    repo,
+    repo,
+    repo,
+    aiService,
+    ttsService,
+    ttsCache
+  );
 
   return streamSSE(c, async (stream) => {
     try {
@@ -52,6 +68,7 @@ app.openapi(startDialogRoute, async (c) => {
               speaker: event.speaker,
               text: event.text,
               source: event.source,
+              audio_url: event.audioUrl,
             });
             break;
           case "done":

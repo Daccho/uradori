@@ -20,6 +20,7 @@ struct TopicItem: Codable {
     let cornerStartTime: String?
     let cornerEndTime: String?
     let headlineGenre: String?
+    let videoUrl: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -29,6 +30,7 @@ struct TopicItem: Codable {
         case cornerStartTime = "corner_start_time"
         case cornerEndTime = "corner_end_time"
         case headlineGenre = "headline_genre"
+        case videoUrl = "video_url"
     }
 }
 
@@ -69,7 +71,7 @@ class APIClient {
         if !queryItems.isEmpty { components.queryItems = queryItems }
 
         var request = URLRequest(url: components.url!)
-        request.timeoutInterval = 2
+        request.timeoutInterval = 10
         let (data, _) = try await URLSession.shared.data(for: request)
         let response = try JSONDecoder().decode(TopicListResponse.self, from: data)
         return response.items
@@ -216,6 +218,6 @@ enum APIError: Error {
 
 extension TopicItem {
     static let mockData: [TopicItem] = [
-        TopicItem(id: "mock-1", titleId: "mock", onairDate: "2026-03-29", headline: "【プレビュー用】サンプルトピック", cornerStartTime: nil, cornerEndTime: nil, headlineGenre: nil)
+        TopicItem(id: "mock-1", titleId: "mock", onairDate: "2026-03-29", headline: "【プレビュー用】サンプルトピック", cornerStartTime: nil, cornerEndTime: nil, headlineGenre: nil, videoUrl: nil)
     ]
 }

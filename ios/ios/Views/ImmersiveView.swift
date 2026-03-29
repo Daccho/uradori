@@ -1,11 +1,13 @@
 import SwiftUI
 import RealityKit
 import RealityKitContent
+import AVFoundation
 
 struct ImmersiveView: View {
     @Environment(SorajiroAI.self) private var sorajiroAI
     @Environment(AudienceAI.self) private var audienceAI
     @Environment(DialogPlaybackController.self) private var dialogPlaybackController
+    @Environment(VideoPlayerManager.self) private var videoPlayerManager
 
     @State private var floatingVoices: [FloatingVoice] = []
     @State private var studioRoot: Entity?
@@ -16,15 +18,28 @@ struct ImmersiveView: View {
             let root = Entity()
             root.name = "StudioRoot"
 
-            // 床（ステージ）
-            let floor = createStageFloor()
-            root.addChild(floor)
+            // 動画背景球体（映像を全方位に投影）
+            if videoPlayerManager.currentURL != nil {
+                let videoSphere = StudioEnvironmentBuilder.buildVideoSphere(player: videoPlayerManager.player)
+                root.addChild(videoSphere)
+            } else {
+                let standbySphere = StudioEnvironmentBuilder.buildStandbySphere()
+                root.addChild(standbySphere)
+            }
+
+            // ステージプラットフォーム
+            let stage = StudioEnvironmentBuilder.buildStagePlatform()
+            root.addChild(stage)
+
+            // スタジオ照明
+            let lights = StudioEnvironmentBuilder.buildStudioLighting()
+            root.addChild(lights)
 
             // ソラジローAIアバター（左側に配置）
             let sorajiroAvatar = await createSorajiroAvatar()
             sorajiroAvatar.name = "SorajiroAvatar"
             sorajiroAvatar.position = [-0.7, 1.2, -2.0]
-            sorajiroAvatar.orientation = simd_quatf(angle: 0.26, axis: [0, 1, 0])
+            sorajiroAvatar.orientation = simd_quatf(angle: .pi - 0.26, axis: [0, 1, 0])
             root.addChild(sorajiroAvatar)
 
             // ソラジローラベル
@@ -112,6 +127,9 @@ struct ImmersiveView: View {
         .onChange(of: audienceAI.messages.count) {
             addFloatingVoice(from: audienceAI.messages.last)
         }
+        .onChange(of: dialogPlaybackController.isSpeaking) {
+            videoPlayerManager.player.isMuted = dialogPlaybackController.isSpeaking
+        }
         .onChange(of: dialogPlaybackController.currentSpeaker) {
             guard let root = studioRoot else { return }
             let sorajiroEntity = root.children.first { $0.name == "SorajiroAvatar" }
@@ -134,15 +152,6 @@ struct ImmersiveView: View {
     }
 
     // MARK: - 3Dエンティティ生成
-
-    private func createStageFloor() -> Entity {
-        let mesh = MeshResource.generatePlane(width: 6, depth: 4)
-        var material = SimpleMaterial()
-        material.color = .init(tint: .init(white: 0.15, alpha: 0.6))
-        let floor = ModelEntity(mesh: mesh, materials: [material])
-        floor.position = [0, 0, -2.0]
-        return floor
-    }
 
     private func createSorajiroAvatar() async -> Entity {
         do {
@@ -295,9 +304,10 @@ struct DialogPanelView: View {
     }
 }
 
-#Preview(immersionStyle: .mixed) {
+#Preview(immersionStyle: .full) {
     ImmersiveView()
         .environment(SorajiroAI())
         .environment(AudienceAI())
         .environment(DialogPlaybackController())
+        .environment(VideoPlayerManager())
 }

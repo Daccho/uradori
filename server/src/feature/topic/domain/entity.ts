@@ -7,6 +7,7 @@ export type Topic = {
   cornerEndTime?: string | null;
   headlineGenre?: string | null;
   broadcastScript?: string | null;
+  videoUrl?: string | null;
 };
 
 export type CreateTopicInput = Omit<Topic, "id">;
