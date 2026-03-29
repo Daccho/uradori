@@ -1,10 +1,11 @@
 {
   "name": "uradori-web",
   "account_id": "db74745d84b02c3798192c2602098072",
+  "main": ".open-next/worker.js",
   "compatibility_date": "2025-04-01",
   "compatibility_flags": ["nodejs_compat"],
-  "pages_build_output_dir": ".open-next/assets",
   "assets": {
-    "directory": ".open-next/assets"
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
   }
 }
