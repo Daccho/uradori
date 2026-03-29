@@ -5,8 +5,10 @@ import RealityKitContent
 struct ImmersiveView: View {
     @Environment(SorajiroAI.self) private var sorajiroAI
     @Environment(AudienceAI.self) private var audienceAI
+    @Environment(DialogPlaybackController.self) private var dialogPlaybackController
 
     @State private var floatingVoices: [FloatingVoice] = []
+    @State private var studioRoot: Entity?
 
     var body: some View {
         RealityView { content, attachments in
@@ -18,25 +20,40 @@ struct ImmersiveView: View {
             let floor = createStageFloor()
             root.addChild(floor)
 
-            // ソラジローAIアバター（中央奥に配置）
-            let avatar = createSorajiroAvatar()
-            avatar.name = "SorajiroAvatar"
-            avatar.position = [0, 1.2, -2.0]
-            root.addChild(avatar)
+            // ソラジローAIアバター（左側に配置）
+            let sorajiroAvatar = await createSorajiroAvatar()
+            sorajiroAvatar.name = "SorajiroAvatar"
+            sorajiroAvatar.position = [-0.7, 1.2, -2.0]
+            sorajiroAvatar.orientation = simd_quatf(angle: 0.26, axis: [0, 1, 0])
+            root.addChild(sorajiroAvatar)
 
-            // アバターラベル
+            // ソラジローラベル
             if let label = attachments.entity(for: "avatar-label") {
                 label.position = [0, 0.35, 0]
-                avatar.addChild(label)
+                sorajiroAvatar.addChild(label)
             }
 
-            // 対話パネル（アバターの横）
+            // 視聴者代表AIアバター（右側に配置）
+            let viewerAvatar = await createViewerAvatar()
+            viewerAvatar.name = "ViewerRepAvatar"
+            viewerAvatar.position = [0.7, 1.2, -2.0]
+            viewerAvatar.orientation = simd_quatf(angle: -0.26, axis: [0, 1, 0])
+            root.addChild(viewerAvatar)
+
+            // 視聴者代表ラベル
+            if let viewerLabel = attachments.entity(for: "viewer-avatar-label") {
+                viewerLabel.position = [0, 0.35, 0]
+                viewerAvatar.addChild(viewerLabel)
+            }
+
+            // 対話パネル（中央手前に配置）
             if let dialogPanel = attachments.entity(for: "dialog-panel") {
-                dialogPanel.position = [0.8, 1.2, -1.8]
+                dialogPanel.position = [0, 1.2, -1.5]
                 root.addChild(dialogPanel)
             }
 
             content.add(root)
+            studioRoot = root
         } update: { content, attachments in
             // 視聴者の声フローティング更新
             guard let root = content.entities.first(where: { $0.name == "StudioRoot" }) else { return }
@@ -65,6 +82,16 @@ struct ImmersiveView: View {
                     .glassBackgroundEffect()
             }
 
+            // 視聴者代表ラベル
+            Attachment(id: "viewer-avatar-label") {
+                Text("視聴者代表 AI")
+                    .font(.title3)
+                    .bold()
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .glassBackgroundEffect()
+            }
+
             // 対話パネル
             Attachment(id: "dialog-panel") {
                 DialogPanelView(messages: sorajiroAI.messages, questions: sorajiroAI.questions)
@@ -85,6 +112,25 @@ struct ImmersiveView: View {
         .onChange(of: audienceAI.messages.count) {
             addFloatingVoice(from: audienceAI.messages.last)
         }
+        .onChange(of: dialogPlaybackController.currentSpeaker) {
+            guard let root = studioRoot else { return }
+            let sorajiroEntity = root.children.first { $0.name == "SorajiroAvatar" }
+            let viewerEntity = root.children.first { $0.name == "ViewerRepAvatar" }
+
+            let isSorajiroSpeaking = dialogPlaybackController.currentSpeaker == .sorajiro
+            let isViewerSpeaking = dialogPlaybackController.currentSpeaker == .audience
+
+            if let entity = sorajiroEntity {
+                var transform = entity.transform
+                transform.scale = isSorajiroSpeaking ? [1.05, 1.05, 1.05] : [1.0, 1.0, 1.0]
+                entity.move(to: transform, relativeTo: entity.parent, duration: 0.3)
+            }
+            if let entity = viewerEntity {
+                var transform = entity.transform
+                transform.scale = isViewerSpeaking ? [1.05, 1.05, 1.05] : [1.0, 1.0, 1.0]
+                entity.move(to: transform, relativeTo: entity.parent, duration: 0.3)
+            }
+        }
     }
 
     // MARK: - 3Dエンティティ生成
@@ -98,25 +144,56 @@ struct ImmersiveView: View {
         return floor
     }
 
-    private func createSorajiroAvatar() -> Entity {
+    private func createSorajiroAvatar() async -> Entity {
+        do {
+            let entity = try await Entity(named: "Sorajiro", in: realityKitContentBundle)
+            // アニメーションがあれば再生
+            if let animation = entity.availableAnimations.first {
+                entity.playAnimation(animation.repeat())
+            }
+            return entity
+        } catch {
+            print("Failed to load Sorajiro model: \(error)")
+            return createFallbackAvatar()
+        }
+    }
+
+    private func createFallbackAvatar(color: UIColor = .init(red: 0.2, green: 0.6, blue: 1.0, alpha: 1.0),
+                                       headColor: UIColor = .init(red: 0.3, green: 0.7, blue: 1.0, alpha: 1.0)) -> Entity {
         let parent = Entity()
 
         // 胴体
         let bodyMesh = MeshResource.generateSphere(radius: 0.2)
         var bodyMaterial = SimpleMaterial()
-        bodyMaterial.color = .init(tint: .init(red: 0.2, green: 0.6, blue: 1.0, alpha: 1.0))
+        bodyMaterial.color = .init(tint: color)
         let body = ModelEntity(mesh: bodyMesh, materials: [bodyMaterial])
         parent.addChild(body)
 
         // 頭
         let headMesh = MeshResource.generateSphere(radius: 0.15)
         var headMaterial = SimpleMaterial()
-        headMaterial.color = .init(tint: .init(red: 0.3, green: 0.7, blue: 1.0, alpha: 1.0))
+        headMaterial.color = .init(tint: headColor)
         let head = ModelEntity(mesh: headMesh, materials: [headMaterial])
         head.position = [0, 0.28, 0]
         parent.addChild(head)
 
         return parent
+    }
+
+    private func createViewerAvatar() async -> Entity {
+        do {
+            let entity = try await Entity(named: "shichosha", in: realityKitContentBundle)
+            if let animation = entity.availableAnimations.first {
+                entity.playAnimation(animation.repeat())
+            }
+            return entity
+        } catch {
+            print("Failed to load shichosha model: \(error)")
+            return createFallbackAvatar(
+                color: .init(red: 0.2, green: 0.85, blue: 0.4, alpha: 1.0),
+                headColor: .init(red: 0.3, green: 0.9, blue: 0.5, alpha: 1.0)
+            )
+        }
     }
 
     // MARK: - 視聴者の声演出
@@ -222,4 +299,5 @@ struct DialogPanelView: View {
     ImmersiveView()
         .environment(SorajiroAI())
         .environment(AudienceAI())
+        .environment(DialogPlaybackController())
 }

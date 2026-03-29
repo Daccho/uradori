@@ -13,10 +13,12 @@ struct ContentView: View {
     @Environment(SorajiroAI.self) private var sorajiroAI
     @Environment(AudienceAI.self) private var audienceAI
     @Environment(SpeechService.self) private var speechService
+    @Environment(DialogPlaybackController.self) private var dialogPlaybackController
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
 
     @State private var isImmersiveSpaceOpen = false
+    @State private var isTransitioning = false
     @State private var topics: [TopicItem] = []
     @State private var selectedTopic: TopicItem?
     @State private var errorMessage: String?
@@ -54,7 +56,7 @@ struct ContentView: View {
                     Button("対話開始") {
                         guard let topicId = selectedTopic?.id else { return }
                         Task {
-                            await sorajiroAI.startDialog(topicId: topicId)
+                            await sorajiroAI.startDialog(topicId: topicId, playbackController: dialogPlaybackController)
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -62,18 +64,29 @@ struct ContentView: View {
 
                     Toggle("没入モード", isOn: $isImmersiveSpaceOpen)
                         .toggleStyle(.button)
+                        .disabled(isTransitioning)
                 }
                 .padding()
             }
         }
         .padding()
         .onChange(of: isImmersiveSpaceOpen) { _, isOpen in
+            guard !isTransitioning else { return }
             Task {
+                isTransitioning = true
                 if isOpen {
-                    await openImmersiveSpace(id: "ImmersiveSpace")
+                    switch await openImmersiveSpace(id: "ImmersiveSpace") {
+                    case .opened:
+                        break
+                    case .userCancelled, .error:
+                        isImmersiveSpaceOpen = false
+                    @unknown default:
+                        isImmersiveSpaceOpen = false
+                    }
                 } else {
                     await dismissImmersiveSpace()
                 }
+                isTransitioning = false
             }
         }
         .alert("エラー", isPresented: Binding(
@@ -91,11 +104,11 @@ struct ContentView: View {
             if let msg { errorMessage = msg; audienceAI.errorMessage = nil }
         }
         .task {
-            await speechService.requestAuthorization()
+            Task { await speechService.requestAuthorization() }
             do {
                 topics = try await apiClient.fetchTopics()
             } catch {
-                errorMessage = "トピックの取得に失敗しました"
+                topics = TopicItem.mockData
             }
         }
     }
@@ -131,4 +144,5 @@ struct TopicListSection: View {
         .environment(SorajiroAI())
         .environment(AudienceAI())
         .environment(SpeechService())
+        .environment(DialogPlaybackController())
 }

@@ -68,7 +68,9 @@ class APIClient {
         if let onairDate { queryItems.append(URLQueryItem(name: "onair_date", value: onairDate)) }
         if !queryItems.isEmpty { components.queryItems = queryItems }
 
-        let (data, _) = try await URLSession.shared.data(from: components.url!)
+        var request = URLRequest(url: components.url!)
+        request.timeoutInterval = 2
+        let (data, _) = try await URLSession.shared.data(for: request)
         let response = try JSONDecoder().decode(TopicListResponse.self, from: data)
         return response.items
     }
@@ -150,15 +152,15 @@ class APIClient {
         }
     }
 
-    // MARK: - VOICEVOX音声取得
+    // MARK: - TTS音声取得 (ElevenLabs)
 
-    func fetchVoicevoxAudio(text: String, speakerId: Int = 1) async throws -> Data {
-        let url = baseURL.appendingPathComponent("api/voicevox/synthesis")
+    func fetchTTSAudio(text: String, speaker: String = "sorajiro") async throws -> Data {
+        let url = baseURL.appendingPathComponent("api/tts/synthesis")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let body: [String: Any] = ["text": text, "speaker": speakerId]
+        let body: [String: Any] = ["text": text, "speaker": speaker]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -210,4 +212,10 @@ private extension VoiceRequest {
 enum APIError: Error {
     case requestFailed
     case invalidResponse
+}
+
+extension TopicItem {
+    static let mockData: [TopicItem] = [
+        TopicItem(id: "mock-1", titleId: "mock", onairDate: "2026-03-29", headline: "【プレビュー用】サンプルトピック", cornerStartTime: nil, cornerEndTime: nil, headlineGenre: nil)
+    ]
 }

@@ -1,5 +1,4 @@
 import Foundation
-import AVFoundation
 
 @Observable
 class SorajiroAI {
@@ -10,9 +9,8 @@ class SorajiroAI {
     var errorMessage: String?
 
     private let apiClient = APIClient()
-    private var audioPlayer: AVAudioPlayer?
 
-    func startDialog(topicId: String) async {
+    func startDialog(topicId: String, playbackController: DialogPlaybackController) async {
         isStreaming = true
         errorMessage = nil
         defer { isStreaming = false }
@@ -23,12 +21,14 @@ class SorajiroAI {
                 case .questions(let generatedQuestions):
                     questions = generatedQuestions
                 case .dialog(_, let speaker, let text, let source):
+                    let dialogSpeaker: DialogMessage.Speaker = speaker == "sorajiro" ? .sorajiro : .audience
                     let dialogMessage = DialogMessage(
-                        speaker: speaker == "sorajiro" ? .sorajiro : .audience,
+                        speaker: dialogSpeaker,
                         text: text,
                         source: source.flatMap { DialogMessage.InfoSource(rawValue: $0) }
                     )
                     messages.append(dialogMessage)
+                    playbackController.enqueue(text: text, speaker: dialogSpeaker)
                 case .done(let id):
                     sessionId = id
                 case .error(let code, let message):
@@ -40,17 +40,4 @@ class SorajiroAI {
         }
     }
 
-    func speak(text: String) async {
-        do {
-            let audioData = try await apiClient.fetchVoicevoxAudio(text: text)
-            try playAudio(data: audioData)
-        } catch {
-            print("VOICEVOX audio error: \(error)")
-        }
-    }
-
-    private func playAudio(data: Data) throws {
-        audioPlayer = try AVAudioPlayer(data: data)
-        audioPlayer?.play()
-    }
 }

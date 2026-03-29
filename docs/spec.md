@@ -64,13 +64,15 @@
 [Cloudflare Workers + Hono]
  ├── POST /api/topics          # トピック登録（管理者）
  ├── GET  /api/topics          # トピック一覧取得
+ ├── POST /api/topics/import   # 外部APIからトピックインポート（管理者）
  ├── POST /api/voice           # 視聴者の声蓄積 → D1保存
  ├── POST /api/dialog/start    # 声集約→質問生成→対話→SSE配信
- └── POST /api/ingest          # 素材登録（管理者）→ D1 + Vectorize
+ ├── POST /api/ingest          # 素材登録（管理者）→ D1 + Vectorize
+ └── POST /api/tts/synthesis   # 音声合成 → ElevenLabs API
           ↕
  ├── Workers AI               # LLM + Embedding（Cloudflare内完結）
  │   ├── llama-3.1-70b-instruct  # 対話・質問生成
- │   └── plamo-embedding-1b      # 日本語Embedding
+ │   └── bge-m3                  # 多言語Embedding
  ├── D1                       # 視聴者の声 蓄積DB
  ├── Vectorize                # 日テレ素材 RAG ベクトルDB
  ├── R2                       # 日テレ素材・VTR ファイル保存
@@ -114,6 +116,7 @@
 - 日テレ提供データの機密性を考慮し、LLM・Embeddingは全てCloudflare Workers AI内で処理
 - Claude API等の外部LLMサービスは使用しない（データがCloudflare外に送信されるため）
 - AI GatewayおよびAnthropic SDKは不要
+- TTS（音声合成）のみElevenLabs外部APIを使用（対話テキストの読み上げ用途のみ、取材素材の原文は送信しない）
 
 ---
 
@@ -147,7 +150,7 @@
 | 種別            | 技術                            | 用途                         |
 | --------------- | ------------------------------- | ---------------------------- |
 | LLMモデル       | @cf/meta/llama-3.1-70b-instruct | 対話・質問生成（Workers AI） |
-| Embeddingモデル | @cf/pfnet/plamo-embedding-1b    | 日本語テキストベクトル化     |
+| Embeddingモデル | @cf/baai/bge-m3                 | 多言語テキストベクトル化     |
 | ベクトルDB      | Cloudflare Vectorize            | 日テレ素材RAG検索            |
 
 ### Cloudflareサービス
@@ -180,35 +183,39 @@ uradori/
 ├── server/                        # Hono + Cloudflare Workers
 │   ├── src/
 │   │   ├── index.ts               # エントリーポイント
-│   │   ├── routes/
-│   │   │   ├── topics.ts          # トピック登録・一覧API
-│   │   │   ├── voice.ts           # 視聴者の声受付API
-│   │   │   ├── dialog.ts          # 声集約→質問生成→対話→SSE配信
-│   │   │   └── ingest.ts          # 素材登録（D1 + Vectorize）
-│   │   ├── ai/
-│   │   │   ├── sorajiro.ts        # ソラジローAI（Workers AI + RAG）
-│   │   │   └── audience.ts        # 視聴者代表AI（声集約→質問生成）
-│   │   ├── db/
-│   │   │   └── schema.ts          # Drizzle ORMスキーマ定義
-│   │   └── middleware/
-│   │       └── admin-auth.ts      # X-Admin-Key認証ミドルウェア
-│   ├── test/
-│   │   ├── routes/                # API統合テスト
-│   │   └── ai/                    # AIロジックユニットテスト
+│   │   ├── shared/
+│   │   │   ├── app-factory.ts     # Honoアプリファクトリ
+│   │   │   ├── schema.ts          # 共通レスポンススキーマ
+│   │   │   ├── db/
+│   │   │   │   ├── client.ts      # Drizzle DB クライアント
+│   │   │   │   └── schema.ts      # Drizzle ORMスキーマ定義
+│   │   │   └── middleware/
+│   │   │       └── admin-auth.ts  # X-Admin-Key認証ミドルウェア
+│   │   └── feature/
+│   │       ├── topic/             # トピック登録・一覧・インポート
+│   │       ├── voice/             # 視聴者の声受付
+│   │       ├── dialog/            # 声集約→質問生成→AI対話→SSE配信
+│   │       ├── ingest/            # 素材登録（D1 + Vectorize）
+│   │       └── tts/               # 音声合成（ElevenLabs）
+│   ├── drizzle/migrations/        # D1マイグレーション
 │   ├── wrangler.jsonc
 │   └── vitest.config.ts
 ├── ios/                           # visionOSアプリ（Swift）
-│   ├── UradoriApp.swift
-│   ├── Views/
-│   │   ├── ImmersiveView.swift    # RealityKit空間（スタジオ・VTR）
-│   │   ├── DialogView.swift       # AI対話テキスト表示
-│   │   └── VoiceInputView.swift   # 音声入力UI
-│   ├── Models/
-│   │   ├── SorajiroAI.swift       # ソラジローAIモデル
-│   │   └── AudienceAI.swift       # 視聴者代表AIモデル
-│   └── Services/
-│       ├── APIClient.swift        # Workers API呼び出し
-│       └── SpeechService.swift    # 音声認識
+│   ├── ios/
+│   │   ├── iosApp.swift           # アプリエントリーポイント
+│   │   ├── ContentView.swift      # メイン画面（トピック選択・対話UI）
+│   │   ├── Views/
+│   │   │   ├── ImmersiveView.swift    # RealityKit空間（スタジオ・VTR）
+│   │   │   ├── DialogView.swift       # AI対話テキスト表示
+│   │   │   └── VoiceInputView.swift   # 音声入力UI
+│   │   ├── Models/
+│   │   │   ├── SorajiroAI.swift       # ソラジローAI状態管理
+│   │   │   ├── AudienceAI.swift       # 視聴者代表AI状態管理
+│   │   │   └── DialogPlaybackController.swift  # TTS音声再生制御
+│   │   └── Services/
+│   │       ├── APIClient.swift        # Workers API呼び出し
+│   │       └── SpeechService.swift    # 音声認識
+│   └── Packages/RealityKitContent/    # 3Dアセット（ソラジローアバター等）
 └── docs/
     └── spec.md                    # 仕様書
 ```
@@ -228,9 +235,11 @@ uradori/
 |---------|------|------|------|
 | POST | `/api/topics` | Admin Key | トピック登録 |
 | GET | `/api/topics` | なし | トピック一覧取得 |
+| POST | `/api/topics/import` | Admin Key | 外部APIからトピック一括インポート |
 | POST | `/api/voice` | なし | 視聴者の声を蓄積 |
 | POST | `/api/dialog/start` | なし | 声集約→質問生成→ソラジロー対話→SSE配信 |
 | POST | `/api/ingest` | Admin Key | 素材をVectorize登録 |
+| POST | `/api/tts/synthesis` | なし | テキスト音声合成（ElevenLabs） |
 
 ### `POST /api/topics`（管理者）
 
@@ -295,9 +304,16 @@ Body: { topic_id: string }
 
 // 1. 質問一覧（視聴者の声を集約してAI生成）
 event: questions
-data: { questions: [{ text: string, based_on_count: number }] }
+data: { questions: [{ text: string, basedOnCount: number }] }
 
-// 2. 各質問に対するソラジローAIの応答を順次配信
+// 2. 各質問に対する視聴者代表AI→ソラジローAIの対話を順次配信
+event: dialog
+data: {
+  question: string,
+  speaker: "audience",
+  text: string
+}
+
 event: dialog
 data: {
   question: string,
@@ -336,6 +352,41 @@ Body: {
 
 // Response: 201
 { ok: true, indexed_count: number }
+```
+
+### `POST /api/topics/import`（管理者）
+
+外部API（日テレハッカソン）からトピック（コーナー情報）を一括インポート。
+
+```typescript
+// Request
+Headers: { "X-Admin-Key": "secret" }
+Body: {
+  title_id: string,        // 番組ID (例: "ﾐ00C")
+  onair_date: string       // YYYY-MM-DD
+}
+// Response: 201
+{
+  ok: true,
+  created_count: number,   // 作成されたトピック数
+  ids: string[],           // 作成されたトピックIDの一覧
+  skipped_count: number    // 重複スキップ数
+}
+```
+
+### `POST /api/tts/synthesis`（公開）
+
+テキストを音声合成（ElevenLabs API経由）。対話テキストの読み上げに使用。
+
+```typescript
+// Request
+Body: {
+  text: string,            // 読み上げテキスト
+  speaker?: string         // "sorajiro" | "audience"（デフォルト: "sorajiro"）
+}
+// Response: 200
+// Content-Type: audio/mpeg
+// MP3バイナリデータ
 ```
 
 ### エラーレスポンス（全エンドポイント共通）
@@ -424,7 +475,7 @@ CREATE TABLE dialog_logs (
 CREATE TABLE materials (
   id TEXT PRIMARY KEY,              -- UUID v7
   topic_id TEXT NOT NULL REFERENCES topics(id),
-  type TEXT NOT NULL,               -- 'script' | 'memo' | 'unaired'
+  type TEXT NOT NULL,               -- 'broadcast' | 'unaired' | 'opendata'
   content TEXT NOT NULL,
   vectorize_id TEXT,                -- Vectorizeに登録したベクトルのID
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -487,6 +538,9 @@ CREATE INDEX idx_materials_topic ON materials(topic_id);
 | `ADMIN_KEY` | X-Admin-Key認証 |
 | `HACKATHON_API_KEY` | 外部API(日テレハッカソン)認証 |
 | `HACKATHON_API_URL` | 外部APIベースURL |
+| `ELEVENLABS_API_KEY` | ElevenLabs TTS API認証 |
+| `ELEVENLABS_VOICE_ID_SORAJIRO` | ソラジローAI音声ID |
+| `ELEVENLABS_VOICE_ID_AUDIENCE` | 視聴者代表AI音声ID |
 
 ### バインディング
 
@@ -494,7 +548,7 @@ CREATE INDEX idx_materials_topic ON materials(topic_id);
 |-----------------|------|------|
 | `DB` | D1 | データベース |
 | `VECTORIZE` | Vectorize | ベクトルインデックス |
-| `AI` | Workers AI | LLM（llama-3.1-70b）+ Embedding（plamo-embedding-1b） |
+| `AI` | Workers AI | LLM（llama-3.1-70b）+ Embedding（bge-m3） |
 
 ---
 
@@ -522,7 +576,7 @@ CREATE INDEX idx_materials_topic ON materials(topic_id);
 
 ### Day 2（差別化機能）
 
-- [ ] Vectorize RAG（外部APIからのingest・plamo-embedding-1bでベクトル化）
+- [ ] Vectorize RAG（外部APIからのingest・bge-m3でベクトル化）
 - [ ] 3層情報応答（broadcast / unaired / opendata タグ付き）
 - [ ] RealityKit ImmersiveSpace（スタジオ空間再現）
 - [ ] AVFoundation VTR動画再生

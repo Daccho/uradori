@@ -1,0 +1,275 @@
+@import "tailwindcss";
+
+/* ===== TV STATION BROADCAST THEME ===== */
+
+@theme inline {
+  --color-background: var(--bg-deep);
+  --color-foreground: var(--text-primary);
+  --font-sans: var(--font-noto);
+  --font-mono: var(--font-share-tech);
+}
+
+:root {
+  /* Deep navy broadcast monitor */
+  --bg-deep: #060d1a;
+  --bg-panel: #0c1829;
+  --bg-card: #111f36;
+  --bg-elevated: #162744;
+
+  /* Broadcast reds */
+  --red-primary: #e63946;
+  --red-glow: #ff2d3b;
+  --red-dim: #8b1a22;
+
+  /* Technical cyan */
+  --cyan-primary: #00d4ff;
+  --cyan-dim: #0a6e85;
+
+  /* Text hierarchy */
+  --text-primary: #f0f2f5;
+  --text-secondary: #8a95a8;
+  --text-muted: #4a5568;
+
+  /* Glass panels */
+  --glass-bg: rgba(12, 24, 41, 0.75);
+  --glass-border: rgba(0, 212, 255, 0.12);
+  --glass-border-bright: rgba(0, 212, 255, 0.25);
+  --glass-blur: 16px;
+
+  /* Telop gradient */
+  --telop-gradient: linear-gradient(135deg, rgba(230, 57, 70, 0.15) 0%, rgba(12, 24, 41, 0.9) 100%);
+}
+
+/* ===== BASE ===== */
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  overflow-x: hidden;
+}
+
+/* Background grid pattern — broadcast monitor reference lines */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Subtle scanline overlay */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ===== ANIMATIONS ===== */
+@keyframes on-air-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 8px 2px var(--red-glow), 0 0 20px 4px rgba(255, 45, 59, 0.3);
+  }
+  50% {
+    opacity: 0.4;
+    box-shadow: 0 0 4px 1px var(--red-dim), 0 0 8px 2px rgba(255, 45, 59, 0.1);
+  }
+}
+
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes telop-slide-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes status-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@keyframes glow-line {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes bubble-in {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes bubble-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes bubble-out {
+  0% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-12px) scale(0.9); }
+}
+
+/* ===== UTILITY CLASSES ===== */
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+}
+
+.glass-panel-bright {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border-bright);
+  border-radius: 4px;
+}
+
+/* ON AIR dot */
+.on-air-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--red-primary);
+  animation: on-air-pulse 1.5s ease-in-out infinite;
+}
+
+/* Ticker bar animation */
+.ticker-track {
+  display: flex;
+  animation: ticker-scroll 30s linear infinite;
+}
+
+/* Telop card entrance */
+.telop-enter {
+  animation: telop-slide-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Staggered fade up */
+.fade-up {
+  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Glowing accent line */
+.glow-line {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--cyan-primary) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: glow-line 3s linear infinite;
+  opacity: 0.4;
+}
+
+/* Topic card red stripe */
+.telop-stripe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--red-primary) 0%, var(--red-dim) 100%);
+  border-radius: 4px 0 0 4px;
+}
+
+/* Floating voice bubble */
+.floating-bubble {
+  animation: bubble-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both,
+             bubble-float 4s ease-in-out 0.5s infinite;
+}
+
+/* Video background container */
+.video-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.video-bg video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(6,13,26,0.3) 0%, rgba(6,13,26,0.7) 70%, rgba(6,13,26,0.9) 100%);
+  pointer-events: none;
+}
+
+/* Standby background (no video) */
+.standby-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse at 30% 40%, rgba(0,212,255,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 60%, rgba(230,57,70,0.04) 0%, transparent 50%),
+    var(--bg-deep);
+}
+
+/* Focus visible */
+*:focus-visible {
+  outline: 2px solid var(--cyan-primary);
+  outline-offset: 2px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-deep);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}

@@ -26,8 +26,8 @@ export type DialogEvent =
   | {
       type: "dialog";
       question: string;
-      speaker: "sorajiro";
+      speaker: "sorajiro" | "audience";
       text: string;
-      source: string;
+      source?: string;
     }
   | { type: "done"; sessionId: string };

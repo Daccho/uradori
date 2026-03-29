@@ -56,7 +56,7 @@ export class WorkersAIService implements AIService {
     topicId: string
   ): Promise<{ text: string; source: string }> {
     const embeddingResult = await this.ai.run(
-      "@cf/pfnet/plamo-embedding-1b" as BaseAiTextEmbeddingModels,
+      "@cf/baai/bge-m3" as BaseAiTextEmbeddingModels,
       {
         text: [question],
       }

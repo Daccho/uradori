@@ -6,9 +6,13 @@ import { adminAuth } from "../../shared/middleware/admin-auth";
 import { D1TopicRepository } from "./infra/d1-topic-repository";
 import { CreateTopicUsecase } from "./usecase/create-topic";
 import { ListTopicsUsecase } from "./usecase/list-topics";
+import { ImportTopicsUsecase, ImportError } from "./usecase/import-topics";
+import { WorkersHackathonApiClient } from "../ingest/infra/hackathon-api-client";
 import {
   CreateTopicBody,
   CreateTopicResponse,
+  ImportTopicsBody,
+  ImportTopicsResponse,
   ListTopicsQuery,
   ListTopicsResponse,
 } from "./schema";
@@ -53,6 +57,58 @@ const listTopicsRoute = createRoute({
       description: "トピック一覧",
     },
   },
+});
+
+const importTopicsRoute = createRoute({
+  method: "post",
+  path: "/import",
+  tags: ["Topics"],
+  security: [{ AdminKey: [] }],
+  request: {
+    body: { content: { "application/json": { schema: ImportTopicsBody } } },
+  },
+  responses: {
+    201: {
+      content: { "application/json": { schema: ImportTopicsResponse } },
+      description: "外部APIからトピックをインポート",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponse } },
+      description: "バリデーションエラー",
+    },
+    401: {
+      content: { "application/json": { schema: ErrorResponse } },
+      description: "認証エラー",
+    },
+  },
+  middleware: [adminAuth] as const,
+});
+
+app.openapi(importTopicsRoute, async (c) => {
+  const body = c.req.valid("json");
+
+  const db = getDb(c.env.DB);
+  const repo = new D1TopicRepository(db);
+  const apiClient = new WorkersHackathonApiClient(
+    c.env.HACKATHON_API_URL,
+    c.env.HACKATHON_API_KEY,
+  );
+  const usecase = new ImportTopicsUsecase(repo, apiClient);
+
+  const result = await usecase.execute({
+    titleId: body.title_id,
+    onairDate: body.onair_date,
+  });
+
+  return c.json(
+    {
+      ok: true as const,
+      created_count: result.createdCount,
+      ids: result.ids,
+      skipped_count: result.skippedCount,
+    },
+    201,
+  );
 });
 
 app.openapi(createTopicRoute, async (c) => {

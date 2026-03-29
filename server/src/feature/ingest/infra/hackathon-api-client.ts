@@ -1,4 +1,4 @@
-import type { HackathonApiClient } from "../domain/repository";
+import type { HackathonApiClient, RawCornerItem } from "../domain/repository";
 
 export class WorkersHackathonApiClient implements HackathonApiClient {
   constructor(
@@ -23,6 +23,20 @@ export class WorkersHackathonApiClient implements HackathonApiClient {
       content: JSON.stringify(item),
       type: "broadcast",
     }));
+  }
+
+  async fetchCornersRaw(
+    titleId: string,
+    onairDate: string
+  ): Promise<RawCornerItem[]> {
+    const url = `${this.apiUrl}/corners?title_id=${encodeURIComponent(titleId)}&onair_date=${encodeURIComponent(onairDate)}`;
+    const res = await fetch(url, {
+      headers: { "X-Api-Key": this.apiKey },
+    });
+    if (!res.ok) {
+      throw new Error(`[HackathonAPI] fetchCornersRaw failed: ${res.status} ${res.statusText} (${url})`);
+    }
+    return (await res.json()) as RawCornerItem[];
   }
 
   async fetchNews(

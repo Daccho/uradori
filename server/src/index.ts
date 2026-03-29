@@ -5,7 +5,7 @@ import topicApp from "./feature/topic/controller";
 import voiceApp from "./feature/voice/controller";
 import dialogApp from "./feature/dialog/controller";
 import ingestApp from "./feature/ingest/controller";
-import voicevoxApp from "./feature/voicevox/controller";
+import ttsApp from "./feature/tts/controller";
 
 const app = createApp();
 
@@ -40,7 +40,7 @@ app.route("/api/topics", topicApp);
 app.route("/api/voice", voiceApp);
 app.route("/api/dialog", dialogApp);
 app.route("/api/ingest", ingestApp);
-app.route("/api/voicevox", voicevoxApp);
+app.route("/api/tts", ttsApp);
 
 app.openAPIRegistry.registerComponent("securitySchemes", "AdminKey", {
   type: "apiKey",

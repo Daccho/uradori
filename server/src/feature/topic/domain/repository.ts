@@ -4,4 +4,5 @@ export interface TopicRepository {
   create(topic: Topic): Promise<void>;
   findById(id: string): Promise<Topic | null>;
   list(filter: ListTopicsFilter): Promise<Topic[]>;
+  findByTitleAndDate(titleId: string, onairDate: string): Promise<Topic[]>;
 }

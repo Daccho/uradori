@@ -7,7 +7,7 @@ export class WorkersEmbeddingService implements EmbeddingService {
   ) {}
 
   async embed(text: string): Promise<number[]> {
-    const result = await this.ai.run("@cf/pfnet/plamo-embedding-1b", {
+    const result = await this.ai.run("@cf/baai/bge-m3" as BaseAiTextEmbeddingModels, {
       text: [text],
     });
     return result.data[0];

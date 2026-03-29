@@ -1,0 +1,6 @@
+ADMIN_KEY=your-admin-key
+HACKATHON_API_KEY=your-hackathon-api-key
+HACKATHON_API_URL=https://example.com/api
+ELEVENLABS_API_KEY=your-elevenlabs-api-key
+ELEVENLABS_VOICE_ID_SORAJIRO=your-sorajiro-voice-id
+ELEVENLABS_VOICE_ID_AUDIENCE=your-audience-voice-id
