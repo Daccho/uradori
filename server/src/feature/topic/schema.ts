@@ -20,6 +20,18 @@ export const ListTopicsQuery = z.object({
   onair_date: z.string().optional().openapi({ description: "放送日でフィルタ" }),
 });
 
+export const ImportTopicsBody = z.object({
+  title_id: z.string().openapi({ description: "番組ID", example: "ﾐ00C" }),
+  onair_date: z.string().openapi({ description: "放送日 (YYYY-MM-DD)", example: "2026-03-29" }),
+});
+
+export const ImportTopicsResponse = z.object({
+  ok: z.literal(true),
+  created_count: z.number().int().openapi({ description: "作成されたトピック数" }),
+  ids: z.array(z.string()).openapi({ description: "作成されたトピックIDの一覧" }),
+  skipped_count: z.number().int().openapi({ description: "重複スキップ数" }),
+});
+
 export const ListTopicsResponse = z.object({
   items: z.array(
     z.object({

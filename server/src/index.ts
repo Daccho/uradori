@@ -5,7 +5,7 @@ import topicApp from "./feature/topic/controller";
 import voiceApp from "./feature/voice/controller";
 import dialogApp from "./feature/dialog/controller";
 import ingestApp from "./feature/ingest/controller";
-import voicevoxApp from "./feature/voicevox/controller";
+import ttsApp from "./feature/tts/controller";
 
 const app = createApp();
 
@@ -18,6 +18,12 @@ app.use(
     },
   })
 );
+
+// D1: FK制約を有効化（各リクエストごとに必要）
+app.use("/api/*", async (c, next) => {
+  await c.env.DB.exec("PRAGMA foreign_keys = ON");
+  await next();
+});
 
 app.onError((err, c) => {
   console.error(err);
@@ -34,7 +40,7 @@ app.route("/api/topics", topicApp);
 app.route("/api/voice", voiceApp);
 app.route("/api/dialog", dialogApp);
 app.route("/api/ingest", ingestApp);
-app.route("/api/voicevox", voicevoxApp);
+app.route("/api/tts", ttsApp);
 
 app.openAPIRegistry.registerComponent("securitySchemes", "AdminKey", {
   type: "apiKey",

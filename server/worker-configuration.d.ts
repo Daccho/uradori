@@ -12,7 +12,9 @@ declare namespace Cloudflare {
 		ADMIN_KEY: string;
 		HACKATHON_API_KEY: string;
 		HACKATHON_API_URL: string;
-		VOICEVOX_URL: string;
+		ELEVENLABS_API_KEY: string;
+		ELEVENLABS_VOICE_ID_SORAJIRO: string;
+		ELEVENLABS_VOICE_ID_AUDIENCE: string;
 	}
 }
 interface CloudflareBindings extends Cloudflare.Env {}

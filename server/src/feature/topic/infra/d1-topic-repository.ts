@@ -20,6 +20,14 @@ export class D1TopicRepository implements TopicRepository {
     return row ?? null;
   }
 
+  async findByTitleAndDate(titleId: string, onairDate: string): Promise<Topic[]> {
+    return this.db
+      .select()
+      .from(topics)
+      .where(and(eq(topics.titleId, titleId), eq(topics.onairDate, onairDate)))
+      .all();
+  }
+
   async list(filter: ListTopicsFilter): Promise<Topic[]> {
     const conditions = [];
     if (filter.titleId) {

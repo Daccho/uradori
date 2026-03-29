@@ -59,6 +59,14 @@ export class StartDialogUsecase {
         createdAt: new Date().toISOString(),
       });
 
+      // 視聴者代表AIの質問を送出
+      yield {
+        type: "dialog",
+        question: q.text,
+        speaker: "audience",
+        text: q.text,
+      };
+
       const response = await this.aiService.generateSorajiroResponse(
         q.text,
         topicId
@@ -75,6 +83,7 @@ export class StartDialogUsecase {
         createdAt: new Date().toISOString(),
       });
 
+      // ソラジローAIの応答を送出
       yield {
         type: "dialog",
         question: q.text,
